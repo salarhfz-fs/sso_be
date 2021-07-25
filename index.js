@@ -58,7 +58,7 @@ router.post('/users/login', async ctx => {
         const user = result.rows[0]
         const match = await bcrypt.compare(password.toString().trim(), user.password)
         if (match) {
-          const token = jwt.sign({ username: user.username }, fs.readFileSync('private.key'), jwt_sign_opts)
+          const token = jwt.sign({ username: user.username }, fs.readFileSync('./keys/user/user_private.key'), jwt_user_sign_opts)
           if (token) {
             ctx.status = 200
             ctx.body = {
@@ -115,7 +115,7 @@ router.post('/users/verify', ctx => {
   const { username, token } = body
   if (username && token) {
     try {
-      const decoded = token && jwt.verify(token, fs.readFileSync('public.key'), jwt_verify_opts)
+      const decoded = token && jwt.verify(token, fs.readFileSync('./keys/user/user_public.key'), jwt_user_verify_opts)
       if (decoded && decoded.username === username) {
         ctx.status = 200
         ctx.body = {
