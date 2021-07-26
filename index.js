@@ -11,6 +11,7 @@ const jwt = require('jsonwebtoken')
 
 const DB = require('./db')
 const checkAuth = require('./middlewares')
+const validators = require('./validations')
 // JWT admin config
 const jwt_admin_sign_opts = {
   algorithm: 'RS256',
@@ -46,73 +47,87 @@ const router = new Router();
 // routes
 router.post('/users/login', async ctx => {
   const body = ctx.request.body
-  const { email, password } = body
-  if (email && password) {
-    let query = {
-      text: 'SELECT * from users WHERE email = $1',
-      values: [email.toString().trim()],
+  let { username = '', password = '' } = body
+  let validation_result = validators.username.validate(username)
+  if (validation_result.error) {
+    ctx.status = 200
+    ctx.body = {
+      is_error: true,
+      code: 400,
+      message: validation_result.error.message
     }
-    try {
-      const result = await ctx.db.query(query)
-      if (result.rows.length > 0) {
-        const user = result.rows[0]
-        const match = await bcrypt.compare(password.toString().trim(), user.password)
-        if (match) {
-          const token = jwt.sign({ username: user.username }, fs.readFileSync('./keys/user/user_private.key'), jwt_user_sign_opts)
-          if (token) {
-            ctx.status = 200
-            ctx.body = {
-              is_error: false,
-              code: 200,
-              data: {
-                token,
+  } else {
+    username = validation_result.value
+    validation_result = validators.password.validate(password)
+    if (validation_result.error) {
+      ctx.status = 200
+      ctx.body = {
+        is_error: true,
+        code: 400,
+        message: validation_result.error.message
+      }
+    } else {
+      password = validation_result.value
+      let query = {
+        text: 'SELECT * from users WHERE username = $1',
+        values: [username.toString()],
+      }
+      try {
+        const result = await ctx.db.query(query)
+        if (result.rows.length > 0) {
+          const user = result.rows[0]
+          const match = await bcrypt.compare(password.toString(), user.password)
+          if (match) {
+            const token = jwt.sign({ username: user.username }, fs.readFileSync('./keys/user/user_private.key'), jwt_user_sign_opts)
+            if (token) {
+              ctx.status = 200
+              ctx.body = {
+                is_error: false,
+                code: 200,
+                data: {
+                  token,
+                }
+              }
+            } else {
+              ctx.status = 200
+              ctx.body = {
+                is_error: true,
+                code: 500,
+                message: 'Internal server error'
               }
             }
           } else {
             ctx.status = 200
             ctx.body = {
               is_error: true,
-              code: 500,
-              message: 'Internal server error'
+              code: 401,
+              message: 'Invalid username or password'
             }
           }
         } else {
           ctx.status = 200
           ctx.body = {
             is_error: true,
-            code: 401,
-            message: 'Invalid email or password'
+            code: 404,
+            message: 'User not found'
           }
         }
-      } else {
+      } catch (err) {
         ctx.status = 200
         ctx.body = {
           is_error: true,
-          code: 404,
-          message: 'User not found'
+          code: 500,
+          message: 'Internal server error'
         }
       }
-    } catch (err) {
-      ctx.status = 200
-      ctx.body = {
-        is_error: true,
-        code: 500,
-        message: 'Internal server error'
-      }
-    }
-  } else {
-    ctx.status = 200
-    ctx.body = {
-      is_error: true,
-      code: 400,
-      message: 'Please enter your email and password'
     }
   }
 })
 
 router.post('/users/verify', ctx => {
   const body = ctx.request.body
-  const { username, token } = body
+  const { username = '', token = '' } = body
+
   if (username && token) {
     try {
       const decoded = token && jwt.verify(token, fs.readFileSync('./keys/user/user_public.key'), jwt_user_verify_opts)
@@ -150,68 +165,80 @@ router.post('/users/verify', ctx => {
 
 router.post('/admins/login', async ctx => {
   const body = ctx.request.body
-  const { email, password } = body
-  if (email && password) {
-    let query = {
-      text: 'SELECT * from admins WHERE email = $1',
-      values: [email.toString().trim()],
+  let { email = '', password = '' } = body
+
+  let validation_result = validators.email.validate(email)
+  if (validation_result.error) {
+    ctx.status = 200
+    ctx.body = {
+      is_error: true,
+      code: 400,
+      message: validation_result.error.message
     }
-    try {
-      const result = await ctx.db.query(query)
-      if (result.rows.length > 0) {
-        const admin = result.rows[0]
-        const match = await bcrypt.compare(password.toString().trim(), admin.password)
-        if (match) {
-          const token = jwt.sign({ username: admin.username }, fs.readFileSync('./keys/admin/admin_private.key'), jwt_admin_sign_opts)
-          if (token) {
-            ctx.status = 200
-            ctx.body = {
-              is_error: false,
-              code: 200,
-              data: {
-                token,
+  } else {
+    email = validation_result.value
+    validation_result = validators.password.validate(password)
+    if (validation_result.error) {
+      ctx.status = 200
+      ctx.body = {
+        is_error: true,
+        code: 400,
+        message: validation_result.error.message
+      }
+    } else {
+      password = validation_result.value
+      let query = {
+        text: 'SELECT * from admins WHERE email = $1',
+        values: [email.toString()],
+      }
+      try {
+        const result = await ctx.db.query(query)
+        if (result.rows.length > 0) {
+          const admin = result.rows[0]
+          const match = await bcrypt.compare(password.toString(), admin.password)
+          if (match) {
+            const token = jwt.sign({ username: admin.username }, fs.readFileSync('./keys/admin/admin_private.key'), jwt_admin_sign_opts)
+            if (token) {
+              ctx.status = 200
+              ctx.body = {
+                is_error: false,
+                code: 200,
+                data: {
+                  token,
+                }
+              }
+            } else {
+              ctx.status = 200
+              ctx.body = {
+                is_error: true,
+                code: 500,
+                message: 'Internal server error'
               }
             }
           } else {
             ctx.status = 200
             ctx.body = {
               is_error: true,
-              code: 500,
-              message: 'Internal server error'
+              code: 401,
+              message: 'Invalid email or password'
             }
           }
         } else {
           ctx.status = 200
           ctx.body = {
             is_error: true,
-            code: 401,
-            message: 'Invalid email or password'
+            code: 404,
+            message: 'User not found'
           }
         }
-      } else {
+      } catch (err) {
         ctx.status = 200
         ctx.body = {
           is_error: true,
-          code: 404,
-          message: 'User not found'
+          code: 500,
+          message: 'Internal server error'
         }
       }
-    } catch (err) {
-      ctx.status = 200
-      ctx.body = {
-        is_error: true,
-        code: 500,
-        message: 'Internal server error'
-      }
-    }
-    const res = DB.query(query)
-
-  } else {
-    ctx.status = 200
-    ctx.body = {
-      is_error: true,
-      code: 400,
-      message: 'Please enter your email and password'
     }
   }
 })
@@ -250,104 +277,174 @@ router.get('/admins/users', checkAuth('./keys/admin/admin_public.key', jwt_admin
 
 router.post('/admins/users', checkAuth('./keys/admin/admin_public.key', jwt_admin_verify_opts), async ctx => {
   const body = ctx.request.body
-  const { username, password, email, department } = body
-  if (username && password && email && department) {
-    let query = {
-      text: 'SELECT id FROM users WHERE email = $1',
-      values: [email],
-    }
-    let result = await ctx.db.query(query)
-    if (result.rows.length > 0) {
-      ctx.status = 200
-      ctx.body = {
-        is_error: true,
-        code: 409,
-        message: 'User already exists'
-      }
-    } else {
-      try {
-        const hash_password = await bcrypt.hash(password, parseInt(process.env.SALT_ROUNDS))
-        if (hash_password) {
-          query = {
-            text: 'INSERT INTO users (username, password, email, department) VALUES ($1, $2, $3, $4)',
-            values: [username, hash_password, email, department],
-          }
-          result = await ctx.db.query(query)
-          if (result.rowCount === 1) {
-            ctx.status = 200
-            ctx.body = {
-              is_error: false,
-              code: 201
-            }
-          } else {
-            ctx.status = 200
-            ctx.body = {
-              is_error: true,
-              code: 500,
-              message: 'Internal server error'
-            }
-          }
-        } else {
-          ctx.status = 200
-          ctx.body = {
-            is_error: true,
-            code: 500,
-            message: 'Internal server error'
-          }
-        }
-      } catch (err) {
-        ctx.status = 200
-        ctx.body = {
-          is_error: true,
-          code: 500,
-          message: 'Internal server error'
-        }
-      }
-    }
-  } else {
+  let { username = '', password = '', email = '', department = '' } = body
+
+  let validation_result = validators.username.validate(username)
+  if (validation_result.error) {
     ctx.status = 200
     ctx.body = {
       is_error: true,
       code: 400,
-      message: 'Username, password, email and department are required'
+      message: validation_result.error.message
+    }
+  } else {
+    username = validation_result.value
+    validation_result = validators.password.validate(password)
+    if (validation_result.error) {
+      ctx.status = 200
+      ctx.body = {
+        is_error: true,
+        code: 400,
+        message: validation_result.error.message
+      }
+    } else {
+      password = validation_result.value
+      validation_result = validators.email.validate(email)
+      if (validation_result.error) {
+        ctx.status = 200
+        ctx.body = {
+          is_error: true,
+          code: 400,
+          message: validation_result.error.message
+        }
+      } else {
+        email = validation_result.value
+        validation_result = validators.department.validate(department)
+        if (validation_result.error) {
+          ctx.status = 200
+          ctx.body = {
+            is_error: true,
+            code: 400,
+            message: validation_result.error.message
+          }
+        } else {
+          department = validation_result.value
+          let query = {
+            text: 'SELECT id FROM users WHERE email = $1',
+            values: [email],
+          }
+          let result = await ctx.db.query(query)
+          if (result.rows.length > 0) {
+            ctx.status = 200
+            ctx.body = {
+              is_error: true,
+              code: 409,
+              message: 'User already exists'
+            }
+          } else {
+            try {
+              const hash_password = await bcrypt.hash(password, parseInt(process.env.SALT_ROUNDS))
+              if (hash_password) {
+                query = {
+                  text: 'INSERT INTO users (username, password, email, department) VALUES ($1, $2, $3, $4)',
+                  values: [username, hash_password, email, department],
+                }
+                result = await ctx.db.query(query)
+                if (result.rowCount === 1) {
+                  ctx.status = 200
+                  ctx.body = {
+                    is_error: false,
+                    code: 201
+                  }
+                } else {
+                  ctx.status = 200
+                  ctx.body = {
+                    is_error: true,
+                    code: 500,
+                    message: 'Internal server error'
+                  }
+                }
+              } else {
+                ctx.status = 200
+                ctx.body = {
+                  is_error: true,
+                  code: 500,
+                  message: 'Internal server error'
+                }
+              }
+            } catch (err) {
+              ctx.status = 200
+              ctx.body = {
+                is_error: true,
+                code: 500,
+                message: 'Internal server error'
+              }
+            }
+          }
+        }
+      }
     }
   }
 })
 
 router.post('/admins/users/update/:id', checkAuth('./keys/admin/admin_public.key', jwt_admin_verify_opts), async ctx => {
   const body = ctx.request.body
-  const { username, email, is_enabled = true, department } = body
-  if (ctx.params.id && typeof parseInt(ctx.params.id) === 'number' && username?.length && email?.length && department?.length) {
-    let query = {
-      text: 'SELECT id FROM users WHERE id = $1',
-      values: [ctx.params.id],
-    }
-    let result = await ctx.db.query(query)
-    if (result.rows.length > 0) {
-      query = {
-        text: 'UPDATE users SET username = $1, email = $2, department = $3, is_enabled = $4 WHERE id = $5',
-        values: [username, email, department, is_enabled ? 't' : 'f', ctx.params.id],
-      }
-      result = await ctx.db.query(query)
-      if (result.rowCount === 1) {
-        ctx.body = {
-          is_error: false,
-          code: 200
-        }
-      } else {
-        ctx.status = 200
-        ctx.body = {
-          is_error: true,
-          code: 500,
-          message: 'Internal server error',
-        }
-      }
-    } else {
+  let { username = '', email = '', is_enabled = true, department = '' } = body
+
+  if (ctx.params.id && typeof parseInt(ctx.params.id) === 'number') {
+    let validation_result = validators.username.validate(username)
+    if (validation_result.error) {
       ctx.status = 200
       ctx.body = {
         is_error: true,
-        code: 404,
-        message: 'User not found'
+        code: 400,
+        message: validation_result.error.message
+      }
+    } else {
+      username = validation_result.value
+      validation_result = validators.email.validate(email)
+      if (validation_result.error) {
+        ctx.status = 200
+        ctx.body = {
+          is_error: true,
+          code: 400,
+          message: validation_result.error.message
+        }
+      } else {
+        email = validation_result.value
+        validation_result = validators.department.validate(department)
+        if (validation_result.error) {
+          ctx.status = 200
+          ctx.body = {
+            is_error: true,
+            code: 400,
+            message: validation_result.error.message
+          }
+        } else {
+          department = validation_result.value
+          let query = {
+            text: 'SELECT id FROM users WHERE id = $1',
+            values: [ctx.params.id],
+          }
+          let result = await ctx.db.query(query)
+          if (result.rows.length > 0) {
+            query = {
+              text: 'UPDATE users SET username = $1, email = $2, department = $3, is_enabled = $4 WHERE id = $5',
+              values: [username, email, department, is_enabled ? 't' : 'f', ctx.params.id],
+            }
+            result = await ctx.db.query(query)
+            if (result.rowCount === 1) {
+              ctx.body = {
+                is_error: false,
+                code: 200
+              }
+            } else {
+              ctx.status = 200
+              ctx.body = {
+                is_error: true,
+                code: 500,
+                message: 'Internal server error',
+              }
+            }
+          } else {
+            ctx.status = 200
+            ctx.body = {
+              is_error: true,
+              code: 404,
+              message: 'User not found'
+            }
+          }
+        }
       }
     }
   } else {
@@ -355,34 +452,52 @@ router.post('/admins/users/update/:id', checkAuth('./keys/admin/admin_public.key
     ctx.body = {
       is_error: true,
       code: 400,
-      message: 'ID, username, email and department are required'
+      message: 'ID is required'
     }
   }
 })
 
 router.post('/admins/users/change_password/:id', checkAuth('./keys/admin/admin_public.key', jwt_admin_verify_opts), async ctx => {
   const body = ctx.request.body
-  const { password } = body
-  if (ctx.params.id && typeof parseInt(ctx.params.id) === 'number' && password?.length === 20) {
-    let query = {
-      text: 'SELECT id FROM users WHERE id = $1',
-      values: [ctx.params.id],
-    }
-    let result = await ctx.db.query(query)
-    if (result.rows.length > 0) {
-      try {
-        const hash_password = await bcrypt.hash(password, parseInt(process.env.SALT_ROUNDS))
-        if (hash_password) {
-          query = {
-            text: 'UPDATE users SET password = $1 WHERE id = $2',
-            values: [hash_password, ctx.params.id],
-          }
-          result = await ctx.db.query(query)
-          if (result.rowCount === 1) {
-            ctx.status = 200
-            ctx.body = {
-              is_error: false,
-              code: 200
+  let { password = '' } = body
+  if (ctx.params.id && typeof parseInt(ctx.params.id) === 'number') {
+    const validation_result = validators.password.validate(password)
+    if (validation_result.error) {
+      ctx.status = 200
+      ctx.body = {
+        is_error: true,
+        code: 400,
+        message: validation_result.error.message
+      }
+    } else {
+      password = validation_result.value
+      let query = {
+        text: 'SELECT id FROM users WHERE id = $1',
+        values: [ctx.params.id],
+      }
+      let result = await ctx.db.query(query)
+      if (result.rows.length > 0) {
+        try {
+          const hash_password = await bcrypt.hash(password, parseInt(process.env.SALT_ROUNDS))
+          if (hash_password) {
+            query = {
+              text: 'UPDATE users SET password = $1 WHERE id = $2',
+              values: [hash_password, ctx.params.id],
+            }
+            result = await ctx.db.query(query)
+            if (result.rowCount === 1) {
+              ctx.status = 200
+              ctx.body = {
+                is_error: false,
+                code: 200
+              }
+            } else {
+              ctx.status = 200
+              ctx.body = {
+                is_error: true,
+                code: 500,
+                message: 'Internal server error',
+              }
             }
           } else {
             ctx.status = 200
@@ -392,7 +507,7 @@ router.post('/admins/users/change_password/:id', checkAuth('./keys/admin/admin_p
               message: 'Internal server error',
             }
           }
-        } else {
+        } catch (err) {
           ctx.status = 200
           ctx.body = {
             is_error: true,
@@ -400,20 +515,13 @@ router.post('/admins/users/change_password/:id', checkAuth('./keys/admin/admin_p
             message: 'Internal server error',
           }
         }
-      } catch (err) {
+      } else {
         ctx.status = 200
         ctx.body = {
           is_error: true,
-          code: 500,
-          message: 'Internal server error',
+          code: 404,
+          message: 'User not found'
         }
-      }
-    } else {
-      ctx.status = 200
-      ctx.body = {
-        is_error: true,
-        code: 404,
-        message: 'User not found'
       }
     }
   } else {
@@ -421,7 +529,7 @@ router.post('/admins/users/change_password/:id', checkAuth('./keys/admin/admin_p
     ctx.body = {
       is_error: true,
       code: 400,
-      message: 'ID and password are required'
+      message: 'ID is required'
     }
   }
 })
